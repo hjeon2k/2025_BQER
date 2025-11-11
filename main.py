@@ -36,7 +36,7 @@ def calibrate_and_wrap_bqer(
 
 # -------------------- DATA LOADING -----------------------------------------
 
-def prepare_dataloader(encodings, max_seqlen=2048, num_chunks=128):
+def prepare_dataloader(encodings, max_seqlen=16384, num_chunks=256):
     input_ids = encodings["input_ids"][0]
     attention_mask = encodings["attention_mask"][0] if "attention_mask" in encodings else torch.ones_like(input_ids)
     chunks = []
@@ -54,28 +54,27 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", "-m",type=str, default="meta-llama/Llama-3.2-3B")
     parser.add_argument("--qbits", "-q", type=int, default=2)
     # calibration data
-    parser.add_argument("--seqlen", "-s", type=int, default=2048)
+    parser.add_argument("--seqlen", "-s", type=int, default=16384)
     parser.add_argument("--num_chunks", "-n", type=int, default=256)
     # BQER parameters
-    parser.add_argument("--bsz", "-b", type=int, default=32)
     parser.add_argument("--lambda1", "-l", type=float, default=1e-5)
     parser.add_argument("--window_m", "-w", type=int, default=0)
-    parser.add_argument("--clip", "-c", type=float, default=0.5)
-    parser.add_argument("--alpha", "-a", type=float, default=0.5)
+    parser.add_argument("--clip", "-c", type=float, default=0.25)
+    parser.add_argument("--alpha", "-a", type=float, default=0.75)
     parser.add_argument("--group_size", "-g", type=int, default=512)
     args = parser.parse_args()
 
     HF_HOME = os.getenv("HF_HOME", "/data/hf_cache")
-    if args.num_chunks % args.bsz != 0:
-        raise ValueError(f"num_chunks must be divisible by bsz, but got {args.num_chunks} and {args.bsz}")
     # Load models
     fp_model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.bfloat16, device_map="auto")
     q_model = AutoModelForCausalLM.from_pretrained(f"{HF_HOME}/hub/{args.model_name.split('/')[-1]}-{args.qbits}bits-g64", 
                                                     dtype=torch.bfloat16, device_map="auto")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    fp_model.config.use_cache = False
+    q_model.config.use_cache = False
 
-    dataset = load_dataset("allenai/c4", data_files={"train": "en/c4-train.00000-of-01024.json.gz"}, split="train[:1%]")
-    encodings = tokenizer("\n\n".join([x["text"] for x in dataset if len(x["text"].strip()) > 0]), return_tensors="pt")
+    dataset = load_dataset("THUDM/LongBench", "narrativeqa", split="test")
+    encodings = tokenizer("\n\n".join([x["context"] for x in dataset if len(x["context"].strip()) > 0]), return_tensors="pt")
     dataloader = prepare_dataloader(encodings, max_seqlen=args.seqlen, num_chunks=args.num_chunks)
 
     print(f"Given config: " +
@@ -88,6 +87,7 @@ if __name__ == "__main__":
     print(f"Calibrating and wrapping BQER...")
     q_model = calibrate_and_wrap_bqer(
         fp_model, q_model, dataloader, device="cuda", args=args)
+
     del fp_model
     torch.cuda.empty_cache()
 
