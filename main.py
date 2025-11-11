@@ -51,7 +51,7 @@ def prepare_dataloader(encodings, max_seqlen=16384, num_chunks=256):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # model
-    parser.add_argument("--model_name", "-m",type=str, default="meta-llama/Llama-3.2-3B")
+    parser.add_argument("--model", "-m",type=str, default="meta-llama/Llama-3.2-3B")
     parser.add_argument("--qbits", "-q", type=int, default=2)
     # calibration data
     parser.add_argument("--seqlen", "-s", type=int, default=16384)
@@ -66,10 +66,10 @@ if __name__ == "__main__":
 
     HF_HOME = os.getenv("HF_HOME", "/data/hf_cache")
     # Load models
-    fp_model = AutoModelForCausalLM.from_pretrained(args.model_name, dtype=torch.bfloat16, device_map="auto")
-    q_model = AutoModelForCausalLM.from_pretrained(f"{HF_HOME}/hub/{args.model_name.split('/')[-1]}-{args.qbits}bits-g64", 
+    fp_model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.bfloat16, device_map="auto")
+    q_model = AutoModelForCausalLM.from_pretrained(f"{HF_HOME}/hub/{args.model.split('/')[-1]}-{args.qbits}bits-g64", 
                                                     dtype=torch.bfloat16, device_map="auto")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
     fp_model.config.use_cache = False
     q_model.config.use_cache = False
 
@@ -80,9 +80,13 @@ if __name__ == "__main__":
     print(f"Given config: " +
           f"[lambda1={args.lambda1}, window_m={args.window_m}, clip={args.clip}, alpha={args.alpha}, group_size={args.group_size}]")
 
-    # print(f"Evaluating perplexity of original model")
-    # ppl_test = eval_ppl(q_model, tokenizer)
-    # print(f"wikitext perplexity of original model: {ppl_test}")
+    print(f"Evaluating perplexity of original model")
+    ppl_test = eval_ppl(fp_model, tokenizer)
+    print(f"wikitext perplexity of original model: {ppl_test}")
+
+    print(f"Evaluating perplexity of quantized model")
+    ppl_test = eval_ppl(q_model, tokenizer)
+    print(f"wikitext perplexity of quantized model: {ppl_test}")
 
     print(f"Calibrating and wrapping BQER...")
     q_model = calibrate_and_wrap_bqer(

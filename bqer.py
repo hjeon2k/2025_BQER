@@ -18,7 +18,7 @@ class BQERDecoderLayer(nn.Module):
         K_current: Optional[torch.Tensor] = None,   # (G,)
         K_prev: Optional[torch.Tensor] = None,      # unused (m=0)
         window_m: int = 0,
-        alpha: float = 0.5,
+        alpha: float = 0.75,
         place: str = "post",
         group_size: int = 1,                        # >=1; 1 == channel-wise
     ):
@@ -192,7 +192,7 @@ def wrap_model_with_bqer(model: nn.Module,
                          Ks_current: Dict[int, torch.Tensor],  # (G,)
                          Ks_prev: Optional[Dict[int, torch.Tensor]] = None,
                          window_m: int = 0,
-                         alpha: float = 0.5,
+                         alpha: float = 0.75,
                          group_size: int = 1):
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         layers = model.model.layers; hidden_size = model.config.hidden_size
@@ -218,7 +218,7 @@ def apply_bqer(
     Ks_cur: Dict[int, torch.Tensor],
     Ks_prev: Dict[int, torch.Tensor],
     window_m: int = 0,
-    alpha: float = 0.5,
+    alpha: float = 0.75,
     group_size: int = 1,
 ):
     wrap_model_with_bqer(
